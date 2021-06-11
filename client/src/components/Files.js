@@ -25,7 +25,7 @@ const FileUpload = () =>
 
     try
     {
-      const res = await axios.post('/upload', formData,
+      const res = await axios.post('/', formData,
       {
         headers: {
           'Content-Type': 'multipart/form-data'
@@ -38,14 +38,14 @@ const FileUpload = () =>
           );
         }
       });
-
-      const { fileName, filePath } = res.data;
-      setUploadedFile(fileName, filePath);
+      const { fileName, id } = res.data;
+      setUploadedFile(fileName, id);
       setMessage('File Uploaded');
-      setTimeout(() => setUploadPercentage(0), 10000);
+      setTimeout(() => setUploadPercentage(0), 2000);
     }
     catch (err)
     {
+      console.log(err)
       if (err.response.status === 500) setMessage('There was a problem with the server');
       else setMessage(err.response.data.msg);
       setUploadPercentage(0);
@@ -71,8 +71,7 @@ const FileUpload = () =>
       {uploadedFile ? (
         <div className='row mt-5'>
           <div className='col-md-6 m-auto'>
-            <h3 className='text-center'>{uploadedFile.fileName}</h3>
-            <img style={{ width: '100%' }} src={uploadedFile.filePath} alt='' />
+            <a href={uploadedFile.id}><h3 className='text-center'>{uploadedFile.fileName}</h3></a>
           </div>
         </div>
       ) : null}

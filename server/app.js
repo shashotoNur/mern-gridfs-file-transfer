@@ -6,114 +6,97 @@ const mongoose = require('mongoose');
 const multer = require('multer');
 const GridFsStorage = require('multer-gridfs-storage');
 const Grid = require('gridfs-stream');
+const cors = require('cors');
+
 const databaseURI = require('./config');
+let gridfs;
 
 const app = express();
-
-// Middleware
 app.use(bodyParser.json());
+app.use(cors());
 
-// Create mongo connection
-const connection = mongoose.connect(databaseURI,
+mongoose.createConnection(databaseURI,
   {
     useUnifiedTopology: true,
     useNewUrlParser: true,
     useCreateIndex:true,
     useFindAndModify: false
   })
-  .then((_res) =>
+  .then((res) =>
   {
-    // let gridfs = Grid(connection.db, mongoose.mongo);
-    // gridfs.collection('uploads');
+    gridfs = Grid(res.db, mongoose.mongo);
+    gridfs.collection('uploads');
     const port = 5000;
-    app.listen(port, () => console.log(`Server started on port ${port}`));
+    app.listen(port, () => console.log(`Server listening on port ${port}`));
   })
   .catch((err) => console.log(err));
 
-// Initialize storage engine
-const storage = new GridFsStorage({
-  url: databaseURI,
-  file: (_req, file) =>
+const storageEngine = new GridFsStorage(
   {
-    return new Promise((resolve, reject) =>
+    url: databaseURI,
+    file: (_req, file) =>
     {
-      crypto.randomBytes(16, (err, buf) =>
+      return new Promise((resolve, reject) =>
       {
-        if (err)
-          return reject(err);
-
-        const filename = buf.toString('hex') + path.extname(file.filename);
-        
-        const fileInfo =
+        crypto.randomBytes(16, (err, buf) =>
         {
-          filename: filename,
-          bucketName: 'uploads'
-        };
-        resolve(fileInfo);
+          if (err) return reject(err);
+
+          const filename = buf.toString('hex') + path.extname(file.originalname);
+          const fileInfo =
+          {
+            filename: filename,
+            bucketName: 'uploads'
+          };
+
+          resolve(fileInfo);
+        });
       });
-    });
-  },
-  options: {
-    useUnifiedTopology: true,
-  }
-});
+    },
+    options: { useUnifiedTopology: true }
+  });
+const upload = multer({ storage: storageEngine });
 
-//Access the storage engine using multer to upload files
-const upload = multer({ storage });
-
-//Initial page (loads form and uploaded files)
-app.get('/', (req, res) =>
+// Controllers -----------------------------------------------------------------------------
+const getFiles = (_req, res) =>
 {
   gridfs.files.find().toArray((err, files) =>
   {
-    if (!files || files.length === 0)
-      res.render('index', { files: false });
-    else
-    {
-      files.map(file =>
-        {
-          if (file.contentType === 'image/jpeg' || file.contentType === 'image/png') file.isImage = true;
-          else file.isImage = false;
-        });
-      return res.json({ files: files });
-    }
+    if (err) return res.status(500).json({ err: err });
+    if (!files || files.length === 0) return res.status(200).json({ err: 'Storage is empty' });
+    return res.status(200).json({ files: files });
   });
-});
+};
 
-//Uploads file to DB
-app.post('/upload', upload.single('file'), (req, res) =>
+const uploadResponse = (req, res) =>
 {
-  res.redirect('/');
-});
+  console.log(req.file.id)
+  const filename = req.file.filename;
+  const fileId = req.file.id;
+  return res.status(200).json({ filename, fileId });
+}
 
-//Display all files in JSON
-app.get('/files', (_req, res) =>
+const downLoadFile = (req, res) =>
 {
-  gridfs.files.find().toArray((_err, files) =>
+  gridfs.files.findOne({ _id: req.params.id }, (err, file) =>
   {
-    if (!files || files.length === 0)
-      return res.status(404).json({err: 'No files exist'});
-    return res.json(files);
+    if (err) return res.status(500).json({ err: err });
+    if (!file || file.length === 0) return res.status(404).json({ err: 'No file exists' });
+    return res.status(200).json(file);
   });
-});
+};
 
-//Display single file object from DB
-app.get('/files/:filename', (req, res) =>
+const deleteFile = (req, res) =>
 {
-  gridfs.files.findOne({ filename: req.params.filename }, (err, file) =>
-  {
-    if (!file || file.length === 0)
-      return res.status(404).json({err: 'No file exists'});
-    return res.json(file);
-  });
-});
-
-//Delete file from DB
-app.delete('/files/:id', (req, res) =>
-{
-  gridfs.remove({ _id: req.params.id, root: 'uploads' }, (err, gridStore) =>
+  gridfs.remove({ _id: req.params.id, root: 'uploads' }, (err) =>
   {
     if (err) return res.status(404).json({ err: err });
     res.redirect('/');
   });
-});
+};
+
+// Routes ----------------------------------------------------------------------------------
+app.get('/', getFiles);
+app.post('/', upload.single('file'), uploadResponse);
+app.get('/:id', downLoadFile);
+app.post('/:id', deleteFile);

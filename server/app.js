@@ -60,6 +60,7 @@ const upload = multer({ storage: storageEngine });
 // Controllers -----------------------------------------------------------------------------
 const getFiles = (_req, res) =>
 {
+  console.log('files')
   gridfs.files.find().toArray((err, files) =>
   {
     if (err) return res.status(500).json({ err: err });
@@ -82,7 +83,10 @@ const downLoadFile = (req, res) =>
   {
     if (err) return res.status(500).json({ err: err });
     if (!file || file.length === 0) return res.status(404).json({ err: 'No file exists' });
-    return res.status(200).json(file);
+
+    const fileStream = gridfs.createReadStream(file.filename);
+    fileStream.pipe(res);
+    //return res.status(200).json(file);
   });
 };
 
@@ -91,12 +95,17 @@ const deleteFile = (req, res) =>
   gridfs.remove({ _id: req.params.id, root: 'uploads' }, (err) =>
   {
     if (err) return res.status(404).json({ err: err });
-    res.redirect('/');
+    return res.status(200).json({ msg: 'File Deleted'});
   });
 };
+
+const downloadOrDelete = (req, res) =>
+{
+  if(req.params.delete) deleteFile(req, res);
+  else downLoadFile(req, res);
+}
 
 // Routes ----------------------------------------------------------------------------------
 app.get('/', getFiles);
 app.post('/', upload.single('file'), uploadResponse);
-app.get('/:id', downLoadFile);
-app.post('/:id', deleteFile);
+app.post('/:id', downloadOrDelete);

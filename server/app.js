@@ -8,7 +8,7 @@ const GridFsStorage = require('multer-gridfs-storage');
 const Grid = require('gridfs-stream');
 const cors = require('cors');
 
-const databaseURI = require('./config');
+const databaseURI = require('./config/config');
 let gridfs;
 
 const app = express();
@@ -60,7 +60,6 @@ const upload = multer({ storage: storageEngine });
 // Controllers -----------------------------------------------------------------------------
 const getFiles = (_req, res) =>
 {
-  console.log('files')
   gridfs.files.find().toArray((err, files) =>
   {
     if (err) return res.status(500).json({ err: err });
@@ -71,38 +70,32 @@ const getFiles = (_req, res) =>
 
 const uploadResponse = (req, res) =>
 {
-  console.log(req.file.id)
   const filename = req.file.filename;
-  const fileId = req.file.id;
-  return res.status(200).json({ filename, fileId });
+  const id = req.file.id;
+  return res.status(200).json({ filename, id });
 }
-
-const downLoadFile = (req, res) =>
-{
-  gridfs.files.findOne({ _id: req.params.id }, (err, file) =>
-  {
-    if (err) return res.status(500).json({ err: err });
-    if (!file || file.length === 0) return res.status(404).json({ err: 'No file exists' });
-
-    const fileStream = gridfs.createReadStream(file.filename);
-    fileStream.pipe(res);
-    //return res.status(200).json(file);
-  });
-};
-
-const deleteFile = (req, res) =>
-{
-  gridfs.remove({ _id: req.params.id, root: 'uploads' }, (err) =>
-  {
-    if (err) return res.status(404).json({ err: err });
-    return res.status(200).json({ msg: 'File Deleted'});
-  });
-};
 
 const downloadOrDelete = (req, res) =>
 {
-  if(req.params.delete) deleteFile(req, res);
-  else downLoadFile(req, res);
+  if(req.body.delete)
+  {
+    gridfs.remove({ _id: req.params.id, root: 'uploads' }, (err) =>
+    {
+      if (err) return res.status(404).json({ err: err });
+      return res.status(200).json({ msg: 'File Deleted'});
+    });
+  }
+  else
+  {
+    gridfs.files.findOne({ filename: req.params.id }, (err, file) =>
+    {
+      if (err) return res.status(500).json({ err: err });
+      if (!file || file.length === 0) return res.status(404).json({ err: 'No file exists' });
+
+      const fileStream = gridfs.createReadStream(file.filename);
+      fileStream.pipe(res);
+    });
+  }
 }
 
 // Routes ----------------------------------------------------------------------------------

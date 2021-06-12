@@ -2,14 +2,14 @@ import React, { Fragment, useState, useEffect } from 'react';
 import Message from './Message';
 import Progress from './Progress';
 import axios from 'axios';
+import FileSaver from 'file-saver';
 
 const Files = () =>
 {
   const [file, setFile] = useState('');
   const [filename, setFilename] = useState('Choose File');
   const [message, setMessage] = useState('');
-  const [uploadedFile, setUploadedFile] = useState('');
-  const [prevFiles, setPrevFiles] = useState('');
+  const [storageFiles, setStorageFiles] = useState('');
   const [uploadPercentage, setUploadPercentage] = useState(0);
 
   const proxy = "http://localhost:5000";
@@ -26,9 +26,9 @@ const Files = () =>
       {
         try
         {
-          const res = await axios.get(proxy + '/');
+          const res = await axios.get(`${proxy}/`);
           const filesArray = res.data.files;
-          setPrevFiles(filesArray);
+          setStorageFiles(filesArray);
         }
         catch (err) { handleError(err); };
       }
@@ -38,20 +38,24 @@ const Files = () =>
 
   const onFileChange = (event) =>
   {
-    setFile(event.target.files[0]);
-    setFilename(event.target.files[0].name);
+    if(event.target.files[0] !== undefined)
+    {
+      setFile(event.target.files[0]);
+      setFilename(event.target.files[0].name);
+    }
+    else
+    {
+      setFile('');
+      setFilename('Choose File')
+    }
   };
 
-  const downloadHandler = async (id) =>
+  const downloadHandler = async (filename) =>
   {
     try
     {
-      const res = await axios.post(proxy + '/',
-      {
-        id: id,
-        delete: false
-      });
-      console.log(res);
+      const res = await axios.post(`${proxy}/${filename}`, { delete: false }, { responseType: "blob" });
+      FileSaver.saveAs(res.data, filename);
     }
     catch (err){ handleError(err); };
   };
@@ -60,19 +64,19 @@ const Files = () =>
   {
     try
     {
-      const res = await axios.post(proxy + '/',
+      const res = await axios.post(`${proxy}/${id}`,
       {
-        id: id,
         delete: true
       });
 
+      setStorageFiles(storageFiles.filter(file => file._id !== id))
       const { msg } = res.data;
       setMessage(msg);
     }
     catch (err){ handleError(err); };
   };
 
-  const onSubmit = async (event) =>
+  const submitHandler = async (event) =>
   {
     event.preventDefault();
     const formData = new FormData();
@@ -80,7 +84,7 @@ const Files = () =>
 
     try
     {
-      const res = await axios.post(proxy + '/', formData,
+      const res = await axios.post(`${proxy}/`, formData,
       {
         headers: { 'Content-Type': 'multipart/form-data' },
         onUploadProgress: (progressEvent) =>
@@ -90,9 +94,9 @@ const Files = () =>
           );
         }
       });
-      const { fileName, id } = res.data;
-
-      setUploadedFile(fileName, id);
+      const { filename, id } = res.data;
+      if(storageFiles !== '') setStorageFiles([ ...storageFiles, { filename: filename, _id: id } ]);
+      else setStorageFiles({ filename: filename, _id: id })
       setMessage('File Uploaded');
       setTimeout(() => setUploadPercentage(0), 2000);
     }
@@ -107,7 +111,7 @@ const Files = () =>
     <Fragment>
       {message ? <Message msg={message} /> : null}
 
-      <form onSubmit={onSubmit}>
+      <form onSubmit={submitHandler}>
         <div className='custom-file mb-4'>
           <input type='file' className='custom-file-input' id='customFile' onChange={onFileChange} />
           <label className='custom-file-label' htmlFor='customFile'>
@@ -119,26 +123,17 @@ const Files = () =>
         <input type='submit' value='Upload' className='btn btn-primary btn-block mt-4' />
       </form>
 
-      {prevFiles ? (
-        prevFiles.map(prevFile => (
+      {storageFiles ? (
+        storageFiles.map(prevFile => (
           <div key={prevFile._id} className='row mt-5'>
-          <div className='col-md-6 m-auto'>
+          <div className='card col-md-6 m-auto'>
             <h3>{prevFile.filename}</h3>
-            <input type='button' value='Download' onClick={downloadHandler} className='btn btn-secondary btn-block mt-4' />
-            <input type='button' value='Delete' onClick={deleteHandler} className='btn btn-warning btn-block mt-4' />
+            <input type='button' value='Download' onClick={() => {downloadHandler(prevFile.filename)}} className='btn btn-secondary btn-block mt-4' />
+            <input type='button' value='Delete' onClick={() => {deleteHandler(prevFile._id)}} className='btn btn-warning btn-block mt-4' />
+            <br></br>
           </div>
         </div>
         ))
-      ) : null}
-
-      {uploadedFile ? (
-        <div className='row mt-5'>
-          <div className='col-md-6 m-auto'>
-            <h3 className='text-center'>{uploadedFile.filename}</h3>
-            <input type='button' value='Download' onClick={downloadHandler(uploadedFile._id)} className='btn btn-secondary btn-block mt-4' />
-            <input type='button' value='Delete' onClick={deleteHandler(uploadedFile._id)} className='btn btn-warning btn-block mt-4' />
-          </div>
-        </div>
       ) : null}
     </Fragment>
   );
